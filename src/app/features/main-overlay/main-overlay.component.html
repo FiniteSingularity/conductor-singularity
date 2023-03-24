@@ -1,1 +1,3 @@
-<p>Main Overlay Lives!</p>
+<p>{{ obs.currentScene$ | async }}</p>
+<p>{{ obs.streamer$ | async }}</p>
+<button (click)="obs.mac()">Mac</button>

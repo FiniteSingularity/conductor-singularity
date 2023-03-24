@@ -6,8 +6,12 @@ import { environment } from 'src/environments/environment';
 import { ChannelPointRedemptionAdd, getTauMessages, TauEvent } from 'tau-js-client-forked';
 
 const unqueuedIds = [
-  'c05b769d-d4a1-40fe-a73b-c8d631a12103'
+  'c05b769d-d4a1-40fe-a73b-c8d631a12103', // Highlight My Message/write to matrix
 ];
+
+export const unqueuedIdMap: Record<string, string> = {
+  'c05b769d-d4a1-40fe-a73b-c8d631a12103': 'WriteToMatrix',
+};
 
 // const backgroundQueuedIds = [
 //   'an id goes here'
