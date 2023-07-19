@@ -1,0 +1,39 @@
+:host {
+    position: absolute;
+    top: 0; bottom: 0; left: 0; right: 0;
+
+    .wrapper {
+        position: absolute;
+        top: 0; bottom: 0; left: 0; right: 0;
+
+        h1 {
+            text-align: center;
+        }
+
+        countdown {
+            font-size: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        &.pre {
+            background-color: #eeeeee;
+        }
+
+        &.loop-record {
+            background-color: #00b7ff;
+            color: #00283e;
+        }
+
+        &.main-record {
+            background-color: #a3ff93;
+            color: #152213;
+        }
+        &.warning {
+            background-color: #9f0000 !important;
+            color: #ffffff !important;
+            
+        }
+    }
+}

@@ -1,3 +1,7 @@
 <p>{{ obs.currentScene$ | async }}</p>
 <p>{{ obs.streamer$ | async }}</p>
-<button (click)="obs.mac()">Mac</button>
+<p *ngIf="tau.facecamEvents$ | async as fcevents">
+    <ng-container *ngFor="let fce of fcevents">{{ fce.id }}<br></ng-container>
+</p>
+<button (click)="blur(100.0, 1000.0)">Blur</button>
+<button (click)="blur(0.0, 3000.0)">UnBlur</button>

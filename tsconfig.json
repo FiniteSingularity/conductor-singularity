@@ -23,6 +23,9 @@
       "ES2022",
       "dom"
     ],
+    "typeRoots": [
+      "types",
+    ],
     "skipLibCheck": true
   },
   "angularCompilerOptions": {
@@ -30,5 +33,5 @@
     "strictInjectionParameters": true,
     "strictInputAccessModifiers": true,
     "strictTemplates": true
-  }
+  },
 }

@@ -12,10 +12,13 @@ import {
   pipe,
   switchMap,
 } from "rxjs";
+import { FacecamEffectsService } from "src/app/services/facecam-effects.service";
 import { ObsService } from "src/app/services/obs.service";
 import { TauService, unqueuedIdMap } from "src/app/services/tau.service";
 import { environment } from "src/environments/environment";
 import { ChannelPointRedemptionAdd, TauEvent } from "tau-js-client-forked";
+import { TimeLoopComponent } from "../time-loop/time-loop.component";
+import { CloneInteractionService } from "src/app/services/clone-interaction.service";
 
 export interface EmoteData {
   id: string;
@@ -62,13 +65,15 @@ function withUserData<TEvent extends TauEvent>(
   selector: "app-main-overlay",
   templateUrl: "main-overlay.component.html",
   styleUrls: ["main-overlay.component.scss"],
-  imports: [CommonModule],
+  imports: [CommonModule, TimeLoopComponent],
 })
 export class MainOverlayComponent extends ComponentStore<{}> implements OnInit {
   constructor(
-    private tau: TauService,
+    public tau: TauService,
     public obs: ObsService,
-    private http: HttpClient
+    private http: HttpClient,
+    private facecamEffect: FacecamEffectsService,
+    private cloneInteractions: CloneInteractionService
   ) {
     super();
   }
@@ -166,5 +171,33 @@ export class MainOverlayComponent extends ComponentStore<{}> implements OnInit {
     };
     payload = [profileImg, ...payload, profileImg];
     return this.http.post(environment.matrixUrl, payload);
+  }
+
+  setFilter() {
+    const effect = this.obs.callBatchEffect(
+      [
+        {
+          requestType: "SetSourceFilterSettings",
+          requestData: {
+            sourceName: "Hex Stinger From",
+            filterName: "Hexy",
+            filterSettings: {
+              "ToSource.Source": "Hex Stinger To",
+              "ToSource.Type": 1,
+            },
+          },
+        },
+      ],
+      (val) => {
+        console.log("It is done");
+      }
+    );
+
+    effect();
+  }
+
+  blur(blur: number, time: number) {
+    const effect = this.obs.timedBlur({ time, blur });
+    effect();
   }
 }

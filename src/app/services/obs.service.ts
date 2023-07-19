@@ -4,6 +4,9 @@ import OBSWebSocket, {
   OBSEventTypes,
   OBSRequestTypes,
   OBSResponseTypes,
+  RequestBatchRequest,
+  RequestMessage,
+  ResponseMessage,
 } from "obs-websocket-js";
 import {
   defer,
@@ -23,6 +26,8 @@ interface ObsState {
   currentScene: string;
   streamer: string;
   roscodesId: number;
+  timeLoopId: number;
+  timeLoop: boolean;
 }
 
 @Injectable({
@@ -31,6 +36,7 @@ interface ObsState {
 export class ObsService extends ComponentStore<ObsState> {
   readonly streamer$ = this.select((s) => s.streamer);
   readonly currentScene$ = this.select((s) => s.currentScene);
+  readonly timeLoop$ = this.select((s) => s.timeLoop);
 
   constructor() {
     super({
@@ -39,6 +45,8 @@ export class ObsService extends ComponentStore<ObsState> {
       currentScene: "",
       streamer: "",
       roscodesId: -1,
+      timeLoopId: -1,
+      timeLoop: false,
     });
     this.connect();
     this.monitorConnectionClose();
@@ -58,6 +66,7 @@ export class ObsService extends ComponentStore<ObsState> {
             next: (val) => {
               this.patchState({ connected: true });
               this.loadState();
+              this.getBlurDetails();
             },
             error: (err) => {
               console.log("OBS WS Connection Error:", err);
@@ -74,6 +83,21 @@ export class ObsService extends ComponentStore<ObsState> {
     )
   );
 
+  readonly getBlurDetails = this.callBatchEffect(
+    [
+      {
+        requestType: "GetSourceFilter",
+        requestData: {
+          sourceName: "Facecam",
+          filterName: "ChangeFocus",
+        },
+      } as RequestBatchRequest,
+    ],
+    (res) => {
+      console.log(res);
+    }
+  );
+
   readonly loadRoscodes = this.callBatchEffect(
     [
       {
@@ -83,7 +107,17 @@ export class ObsService extends ComponentStore<ObsState> {
           sourceName: "Roscodes",
         },
         outputVariables: {
-          itemId: "sceneItemId",
+          roscodesId: "sceneItemId",
+        },
+      },
+      {
+        requestType: "GetSceneItemId",
+        requestData: {
+          sceneName: "Facecam Keyed",
+          sourceName: "Time Loop",
+        },
+        outputVariables: {
+          timeLoopId: "sceneItemId",
         },
       },
       {
@@ -92,19 +126,34 @@ export class ObsService extends ComponentStore<ObsState> {
           sceneName: "Facecam Keyed",
         },
         inputVariables: {
-          sceneItemId: "itemId",
+          sceneItemId: "roscodesId",
+        },
+      },
+      {
+        requestType: "GetSceneItemEnabled",
+        requestData: {
+          sceneName: "Facecam Keyed",
+        },
+        inputVariables: {
+          sceneItemId: "timeLoopId",
         },
       },
     ],
-    (
-      resp: [
-        OBSResponseTypes["GetSceneItemId"],
-        OBSResponseTypes["GetSceneItemEnabled"]
-      ]
-    ) => {
+    (resp: ResponseMessage[]) => {
+      console.log(resp);
       this.patchState({
-        roscodesId: resp[0].sceneItemId,
-        streamer: resp[1].sceneItemEnabled ? "Roscodes" : "FiniteSingularity",
+        roscodesId: (resp[0].responseData as OBSResponseTypes["GetSceneItemId"])
+          .sceneItemId,
+        timeLoopId: (resp[1].responseData as OBSResponseTypes["GetSceneItemId"])
+          .sceneItemId,
+        streamer: (
+          resp[2].responseData as OBSResponseTypes["GetSceneItemEnabled"]
+        ).sceneItemEnabled
+          ? "Roscodes"
+          : "FiniteSingularity",
+        timeLoop: (
+          resp[3].responseData as OBSResponseTypes["GetSceneItemEnabled"]
+        ).sceneItemEnabled,
       });
     }
   );
@@ -128,12 +177,21 @@ export class ObsService extends ComponentStore<ObsState> {
   readonly monitorSceneItems = this.onEffect(
     "SceneItemEnableStateChanged",
     (val) => {
+      console.log(val);
+      console.log(this.get().roscodesId);
       if (
         val.sceneItemId === this.get().roscodesId &&
         val.sceneName === "Facecam Keyed"
       ) {
         this.patchState({
           streamer: val.sceneItemEnabled ? "Roscodes" : "FiniteSingularity",
+        });
+      } else if (
+        val.sceneItemId === this.get().timeLoopId &&
+        val.sceneName === "Facecam Keyed"
+      ) {
+        this.patchState({
+          timeLoop: val.sceneItemEnabled,
         });
       }
     }
@@ -160,6 +218,12 @@ export class ObsService extends ComponentStore<ObsState> {
   readonly throwback = this.toggleSceneItem({
     sceneName: "Facecam",
     sceneItemName: "Throwback",
+    enabled: true,
+  });
+
+  readonly hacker = this.toggleSceneItem({
+    sceneName: "Facecam",
+    sceneItemName: "Hacker",
     enabled: true,
   });
 
@@ -234,6 +298,250 @@ export class ObsService extends ComponentStore<ObsState> {
   loadState() {
     this.loadCurrentScene();
     this.loadRoscodes();
+  }
+
+  timedFaceBlur(payload: { time: number; blur: number }) {
+    const faceBlur = Math.max(0.01, payload.blur);
+    const faceBlurOff = faceBlur < 0.02;
+
+    let batch: any[] = [
+      {
+        requestType: "SetSourceFilterEnabled",
+        requestData: {
+          sourceName: "Facecam",
+          filterName: "Blur",
+          filterEnabled: true,
+        },
+      },
+      {
+        requestType: "SetSourceFilterEnabled",
+        requestData: {
+          sourceName: "Facecam Blur Mask",
+          filterName: "Blur",
+          filterEnabled: true,
+        },
+      },
+      {
+        requestType: "SetSourceFilterSettings",
+        requestData: {
+          sourceName: "Facecam",
+          filterName: "ChangeFocus",
+          filterSettings: {
+            duration: payload.time,
+            "Filter.Blur.StepScale.X": faceBlur,
+            "Filter.Blur.StepScale.Y": faceBlur,
+          },
+        },
+      },
+      {
+        requestType: "SetSourceFilterSettings",
+        requestData: {
+          sourceName: "Facecam Blur Mask",
+          filterName: "ChangeFocus",
+          filterSettings: {
+            duration: payload.time,
+            "Filter.Blur.StepScale.X": faceBlur,
+            "Filter.Blur.StepScale.Y": faceBlur,
+          },
+        },
+      },
+      {
+        requestType: "SetSourceFilterEnabled",
+        requestData: {
+          sourceName: "Facecam",
+          filterName: "ChangeFocus",
+          filterEnabled: true,
+        },
+      },
+      {
+        requestType: "SetSourceFilterEnabled",
+        requestData: {
+          sourceName: "Facecam Blur Mask",
+          filterName: "ChangeFocus",
+          filterEnabled: true,
+        },
+      },
+    ];
+
+    if (faceBlurOff) {
+      batch = [
+        ...batch,
+        {
+          requestType: "Sleep",
+          requestData: {
+            sleepMillis: payload.time + 50,
+          },
+        },
+        {
+          requestType: "SetSourceFilterEnabled",
+          requestData: {
+            sourceName: "Facecam",
+            filterName: "Blur",
+            filterEnabled: false,
+          },
+        },
+        {
+          requestType: "SetSourceFilterEnabled",
+          requestData: {
+            sourceName: "Facecam Blur Mask",
+            filterName: "Blur",
+            filterEnabled: false,
+          },
+        },
+      ];
+    }
+    return this.callBatchEffect(batch, () => {});
+  }
+
+  timedBlur(payload: { time: number; blur: number }) {
+    // 1. Enable blur on Facecam, Facecam Mask, Facecam Background
+    const faceBlur = Math.max(0.01, payload.blur);
+    const bgBlur = Math.max(0.01, 100.0 - payload.blur);
+    const faceBlurOff = faceBlur < 0.02;
+    const bgBlurOff = bgBlur < 0.02;
+
+    let batch: any[] = [
+      {
+        requestType: "SetSourceFilterEnabled",
+        requestData: {
+          sourceName: "Facecam",
+          filterName: "Blur",
+          filterEnabled: true,
+        },
+      },
+      {
+        requestType: "SetSourceFilterEnabled",
+        requestData: {
+          sourceName: "Facecam Blur Mask",
+          filterName: "Blur",
+          filterEnabled: true,
+        },
+      },
+      {
+        requestType: "SetSourceFilterEnabled",
+        requestData: {
+          sourceName: "Facecam Background",
+          filterName: "Blur",
+          filterEnabled: true,
+        },
+      },
+      {
+        requestType: "SetSourceFilterSettings",
+        requestData: {
+          sourceName: "Facecam",
+          filterName: "ChangeFocus",
+          filterSettings: {
+            duration: payload.time,
+            "Filter.Blur.StepScale.X": faceBlur,
+            "Filter.Blur.StepScale.Y": faceBlur,
+          },
+        },
+      },
+      {
+        requestType: "SetSourceFilterSettings",
+        requestData: {
+          sourceName: "Facecam Blur Mask",
+          filterName: "ChangeFocus",
+          filterSettings: {
+            duration: payload.time,
+            "Filter.Blur.StepScale.X": faceBlur,
+            "Filter.Blur.StepScale.Y": faceBlur,
+          },
+        },
+      },
+      {
+        requestType: "SetSourceFilterSettings",
+        requestData: {
+          sourceName: "Facecam Background",
+          filterName: "ChangeFocus",
+          filterSettings: {
+            duration: payload.time,
+            "Filter.Blur.StepScale.X": bgBlur,
+            "Filter.Blur.StepScale.Y": bgBlur,
+          },
+        },
+      },
+      {
+        requestType: "SetSourceFilterEnabled",
+        requestData: {
+          sourceName: "Facecam",
+          filterName: "ChangeFocus",
+          filterEnabled: true,
+        },
+      },
+      {
+        requestType: "SetSourceFilterEnabled",
+        requestData: {
+          sourceName: "Facecam Blur Mask",
+          filterName: "ChangeFocus",
+          filterEnabled: true,
+        },
+      },
+      {
+        requestType: "SetSourceFilterEnabled",
+        requestData: {
+          sourceName: "Facecam Background",
+          filterName: "ChangeFocus",
+          filterEnabled: true,
+        },
+      },
+    ];
+
+    if (faceBlurOff) {
+      batch = [
+        ...batch,
+        {
+          requestType: "Sleep",
+          requestData: {
+            sleepMillis: payload.time + 50,
+          },
+        },
+        {
+          requestType: "SetSourceFilterEnabled",
+          requestData: {
+            sourceName: "Facecam",
+            filterName: "Blur",
+            filterEnabled: false,
+          },
+        },
+        {
+          requestType: "SetSourceFilterEnabled",
+          requestData: {
+            sourceName: "Facecam Blur Mask",
+            filterName: "Blur",
+            filterEnabled: false,
+          },
+        },
+      ];
+    }
+    if (bgBlurOff) {
+      batch = [
+        ...batch,
+        {
+          requestType: "Sleep",
+          requestData: {
+            sleepMillis: payload.time + 50,
+          },
+        },
+        {
+          requestType: "SetSourceFilterEnabled",
+          requestData: {
+            sourceName: "Facecam Background",
+            filterName: "Blur",
+            filterEnabled: false,
+          },
+        },
+      ];
+    }
+    return this.callBatchEffect(batch, () => {});
+  }
+
+  changeScene(payload: { sceneName: string }) {
+    return this.callEffect({
+      eventType: "SetCurrentProgramScene",
+      callback: () => {},
+      payload: { sceneName: payload.sceneName },
+    });
   }
 
   toggleSceneItem(payload: {

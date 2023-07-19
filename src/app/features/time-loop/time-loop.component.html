@@ -1,0 +1,34 @@
+<div
+    *ngIf="active"
+    class="wrapper"
+    [ngClass]="{pre: step==='pre', 'loop-record': step==='loop-record', 'main-record': step==='main-record', final: step==='final', none: step==='none', warning}"
+>
+    <ng-container *ngIf="step === 'pre'">
+        <h1>Pre</h1>
+        <countdown
+            [config]="preConfig"
+            (event)="handleCountdownEvent($event)"
+        ></countdown>
+    </ng-container>
+    <ng-container *ngIf="step === 'loop-record'">
+        <h1>Loop Record</h1>
+        <countdown
+            [config]="loopRecordConfig"
+            (event)="handleCountdownEvent($event)"
+        ></countdown>
+    </ng-container>
+    <ng-container *ngIf="step === 'main-record'">
+        <h1>Main Record</h1>
+        <countdown
+            [config]="mainRecordConfig"
+            (event)="handleCountdownEvent($event)"
+        ></countdown>
+    </ng-container>
+    <ng-container *ngIf="step === 'final'">
+        <h1>Final</h1>
+        <countdown
+            [config]="finalRecordConfig"
+            (event)="handleCountdownEvent($event)"
+        ></countdown>
+    </ng-container>
+</div>
